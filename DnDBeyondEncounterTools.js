@@ -27,8 +27,6 @@
       head.appendChild(style);
   }
   
-  const encounterId = location.pathname.split('/combat-tracker/')[1].split('/')[0];
-  
   class EncounterTools__Session {
     token = null;
     tokenExpires = 0;
@@ -71,7 +69,7 @@
     _fetchData(path, obj) {
       obj.headers = this._buildRequestHeader(obj);
       if (obj.body) {obj.body = JSON.stringify(obj.body);}
-      return fetch('https://encounter-service.dndbeyond.com/v1/encounters/' + path, obj).then(resp => resp.json()).then(data => data.data).catch(error => console.error(error));
+      return fetch(path, obj).then(resp => resp.json()).then(data => data.data).catch(error => console.error(error));
     }
   }
   
@@ -83,7 +81,10 @@
     order = null;
     notes = null;
     index = null;
-    
+    currentHitPoints = 0;
+    temporaryHitPoints = 0;
+    maximumHitPoints = 0;
+    initiative = 0;
     
     constructor(data) {
       this.id = data.id;
@@ -94,24 +95,107 @@
       this.quantity = data.quantity;
       this.notes = data.notes;
       this.index = data.index;
-      this.currentHit
+      this.currentHitPoints = data.currentHitPoints;
+      this.temporaryHitPoints = data.temporaryHitPoints;
+      this.maximumHitPoints = data.maximumHitPoints;
+      this.initiative = data.initiative;
+    }
+    
+    static LoadFromArray(encounter, monster) {
+      return players.map(player => new EncounterTools__Monster(encounter, monster));
     }
   }
   
   class EncounterTools__Player {
-    constructor() {
+    encounter = null;
+    id = null;
+    count = -1;
+    level = -1;
+    type = "";
+    hidden = false;
+    race = null;
+    gender = null;
+    name = null;
+    userName = null;
+    isReady = true;
+    avatarUrl = null;
+    classByLine = null;
+    initiative = 0;
+    currentHitPoints = 0;
+    temporaryHitPoints = 0;
+    maximumHitPoints = 0;
+    
+    constructor(encounter, data) {
+      this.encounter = encounter;
+      this.id = data.id;
+      this.count = data.count;
+      this.level = data.level;
+      this.type = data.type;
+      this.hidden = data.hidden;
+      this.race = data.race;
+      this.gender = data.gender;
+      this.name = data.name;
+      this.userName = data.userName;
+      this.isReady = data.isReady;
+      this.avatarUrl = data.avatarUrl;
+      this.classByLine = data.classByLine;
+      this.initiative = data.initiative;
+      this.currentHitPoints = data.currentHitPoints;
+      this.maximumHitPoints = data.maximumHitPoints;
+    }
+    
+    static LoadFromArray(encounter, players) {
+      return players.map(player => new EncounterTools__Player(encounter, player));
     }
   }
   
   class EncounterTools__Encounter {
-    
     id = null;
+    name = null;
     monsters = [];
     groups = [];
     players = [];
     
-    constructor(id) {
-      this.id = id;
+    constructor(session) {
+      this.session = session;
+      this.load = this.load.bind(this);
+      this._load = this._load.bind(this);
+    }
+    
+    load(id) {
+      return this.session.getData('https://encounter-service.dndbeyond.com/v1/encounters/' + id).then((resp) => {
+        this._load(resp.data);
+      });;
+    }
+    
+    _load(data) {
+      this.id = data.id;
+      this.name = data.name;
+      this.monsters = EncounterTools__Monster.LoadFromArray(this, data.monsters);
+      this.groupds = data.groups;
+      this.players = EncounterTools__Player.LoadFromArray(this, data.players);
     }
   }
+  
+  const encounter = new EncounterTools__Encounter();
+  
+  const init = () => {
+    const encounterId = location.pathname.split('/combat-tracker/')[1].split('/')[0];
+    encounter.load(encounterId).then(() => console.log(encounter));
+  };
+  
+  let initializer = null;
+  let prevUrl = '';
+  const obs = new MutationObserver(mut => {
+    if (location.href !== prevUrl) {
+      prevUrl = location.href;
+      let delay = 1000;
+      if (/\/builder/.test(window.location.pathname) && loaded === 0) {
+        delay = 0;
+      }
+      clearTimeout(initializer);
+      initializer = setTimeout(init, delay);
+    }
+  });
+  obs.observe(document, {subtree: true, childList: true});
 })();
